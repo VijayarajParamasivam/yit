@@ -27,22 +27,19 @@ def install_mpv():
     try:
         if system == "Windows":
             print("Running: winget install mpv.mpv")
-            subprocess.run(["winget", "install", "mpv.mpv"], check=True)
-            print("Installation complete. Please restart your terminal if Yit doesn't find it immediately.")
-        elif system == "Darwin": # macOS
-            if subprocess.run(["which", "brew"], capture_output=True).returncode == 0:
-                print("Running: brew install mpv")
-                subprocess.run(["brew", "install", "mpv"], check=True)
-            else:
-                print("Homebrew not found. Please install mpv manually: brew install mpv")
-        elif system == "Linux":
-            print("Please install mpv manually (e.g., sudo apt install mpv).")
-            # Linux distros vary too much to auto-install safely without sudo
     except Exception as e:
-        print(f"Automatic installation failed: {e}")
+        print(f"Standard installation failed: {e}")
+        print("Attempting fallback install via MS Store ID...")
+        try:
+             # Try installing by specific ID (Unofficial MPV often found in Store)
+             subprocess.run(["winget", "install", "9P3JFR0CLLL6", "--accept-source-agreements", "--accept-package-agreements"], check=True)
+             print("Fallback installation successful.")
+             return
+        except Exception:
+             print("Automatic installation failed.")
+
         print("Please install mpv manually from: https://mpv.io/installation/")
         if system == "Windows":
-             print("Alternatively, try: winget search mpv")
              try:
                  subprocess.run(["start", "https://mpv.io/installation/"], shell=True)
              except: pass
