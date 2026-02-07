@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -8,10 +9,46 @@ from pathlib import Path
 from types import SimpleNamespace
 
 # Constants
+# Constants
 YIT_DIR = Path.home() / ".yit"
 RESULTS_FILE = YIT_DIR / "results.json"
 HISTORY_FILE = YIT_DIR / "history.json"
-IPC_PIPE = r"\\.\pipe\yit_socket"
+
+if os.name == 'nt':
+    IPC_PIPE = r"\\.\pipe\yit_socket"
+else:
+    IPC_PIPE = str(Path.home() / ".yit" / "socket")
+
+def install_mpv():
+    """Attempts to install MPV based on OS."""
+    system = platform.system()
+    print(f"MPV not found. Attempting to install for {system}...")
+
+    try:
+        if system == "Windows":
+            print("Running: winget install mpv.mpv")
+            subprocess.run(["winget", "install", "mpv.mpv"], check=True)
+            print("Installation complete. Please restart your terminal if Yit doesn't find it immediately.")
+        elif system == "Darwin": # macOS
+            if subprocess.run(["which", "brew"], capture_output=True).returncode == 0:
+                print("Running: brew install mpv")
+                subprocess.run(["brew", "install", "mpv"], check=True)
+            else:
+                print("Homebrew not found. Please install mpv manually: brew install mpv")
+        elif system == "Linux":
+            print("Please install mpv manually (e.g., sudo apt install mpv).")
+            # Linux distros vary too much to auto-install safely without sudo
+    except Exception as e:
+        print(f"Installation failed: {e}")
+        print("Please install mpv manually.")
+
+def check_dependencies():
+    """Checks if MPV is installed."""
+    try:
+        subprocess.run(["mpv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except FileNotFoundError:
+        return False
 
 def ensure_yit_dir():
     if not YIT_DIR.exists():
@@ -103,16 +140,8 @@ def cmd_search(args):
         # Let's try to use the python library method to be cleaner if possible, 
         # but subprocess is standard for this tool type.
         
-        # Adjusting to use 'yt-dlp' command. 
-        # Since we are running this script FROM the venv python, `yt-dlp` might not be in the global path,
-        # but it should be in the venv Scripts.
-        yt_dlp_path = Path(sys.executable).parent / "yt-dlp.exe"
-        if not yt_dlp_path.exists():
-             # Try without extension (linux/mac)
-             yt_dlp_path = Path(sys.executable).parent / "yt-dlp"
-        
-        if not yt_dlp_path.exists():
-             yt_dlp_path = "yt-dlp" # hope for PATH
+        # Use system yt-dlp since we are a package now
+        yt_dlp_path = "yt-dlp"
         
         
         command = [str(yt_dlp_path), "--print", "%(title)s||||%(webpage_url)s", "--flat-playlist", f"ytsearch5:{query}"]
@@ -205,15 +234,21 @@ def cmd_play(args):
             yt_dlp_path = Path(sys.executable).parent
             env["PATH"] = str(yt_dlp_path) + os.pathsep + env["PATH"]
 
+            # Prepare subprocess args based on OS
+            kwargs = {
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+                "env": env,
+                "close_fds": True
+            }
+
+            if os.name == 'nt':
+                kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                kwargs["start_new_session"] = True
+
             # Detach process
-            subprocess.Popen(
-                cmd,
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-                close_fds=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=env
-            )
+            subprocess.Popen(cmd, **kwargs)
             print("Player started in background.")
 
     except Exception as e:
@@ -392,13 +427,107 @@ def cmd_status(args):
         print(f"{status_str} {title}")
     else:
         # Check if running at least
-        if get_ipc_property("idle-active"): # Just checking communication
+        if get_ipc_property("idle-active"): 
              print("Queue is empty.")
         else:
              print("Yit is not running.")
+            
+def cmd_agent(args):
+    """Outputs full player state as JSON for AI agents."""
+    state = {
+        "status": "stopped",
+        "track": {},
+        "position": 0,
+        "duration": 0,
+        "volume": 0,
+        "loop": False,
+        "queue_length": 0
+    }
+
+    # Check if running
+    idle_resp = get_ipc_property("idle-active")
+    if not idle_resp:
+        print(json.dumps(state, indent=2))
+        return
+
+    # Gather data sequentially
+    pause_resp = get_ipc_property("pause")
+    title_resp = get_ipc_property("media-title")
+    path_resp = get_ipc_property("path") # often URL
+    time_resp = get_ipc_property("time-pos")
+    dur_resp = get_ipc_property("duration")
+    vol_resp = get_ipc_property("volume")
+    loop_resp = get_ipc_property("loop-file")
+    playlist_resp = get_ipc_property("playlist-count")
+
+    # Process Status
+    if pause_resp and pause_resp.get("data") is True:
+        state["status"] = "paused"
+    elif pause_resp and pause_resp.get("data") is False:
+        state["status"] = "playing"
+
+    # Process Track Info
+    if title_resp and title_resp.get("data"):
+        state["track"]["title"] = title_resp["data"]
+    if path_resp and path_resp.get("data"):
+        state["track"]["url"] = path_resp["data"]
+
+    # Playback Info
+    if time_resp and time_resp.get("data"):
+        state["position"] = time_resp["data"]
+    if dur_resp and dur_resp.get("data"):
+        state["duration"] = dur_resp["data"]
+    if vol_resp and vol_resp.get("data"):
+        state["volume"] = vol_resp["data"]
+    
+    # Loop Status
+    if loop_resp and loop_resp.get("data") in ["inf", "yes"]:
+        state["loop"] = True
+    
+    # Queue Info
+    if playlist_resp and playlist_resp.get("data"):
+        state["queue_length"] = playlist_resp["data"]
+
+    print(json.dumps(state, indent=2))
+
+def cmd_commands(args):
+    """Outputs available commands as JSON for AI agents."""
+    cmds = [
+        {"cmd": "search", "usage": "yit search <query> [-p]", "desc": "Search YouTube. -p to auto-play."},
+        {"cmd": "play", "usage": "yit play <index>", "desc": "Play a track from results."},
+        {"cmd": "add", "usage": "yit add <index>", "desc": "Add a track to queue."},
+        {"cmd": "pause", "usage": "yit pause", "desc": "Pause playback."},
+        {"cmd": "resume", "usage": "yit resume", "desc": "Resume playback."},
+        {"cmd": "stop", "usage": "yit stop", "desc": "Stop playback completely."},
+        {"cmd": "next", "usage": "yit next", "desc": "Skip to next track."},
+        {"cmd": "back", "usage": "yit back", "desc": "Go to previous track."},
+        {"cmd": "loop", "usage": "yit loop", "desc": "Loop current track indefinitely."},
+        {"cmd": "unloop", "usage": "yit unloop", "desc": "Stop looping."},
+        {"cmd": "queue", "usage": "yit queue", "desc": "Show current queue."},
+        {"cmd": "clear", "usage": "yit clear", "desc": "Clear the queue."},
+        {"cmd": "status", "usage": "yit status", "desc": "Show playback status (text)."},
+        {"cmd": "agent", "usage": "yit agent", "desc": "Get full system state (JSON)."},
+        {"cmd": "commands", "usage": "yit commands", "desc": "Get this list (JSON)."},
+        {"cmd": "0", "usage": "yit 0", "desc": "Replay current track."}
+    ]
+    print(json.dumps(cmds, indent=2))
 
 def main():
-    parser = argparse.ArgumentParser(description="Yit - Fire-and-Forget Terminal Music Player")
+    if not check_dependencies():
+        print("MPV is required but not found in PATH.")
+        print("Yit can attempt to install it for you.")
+        response = input("Install MPV now? (Y/n): ").strip().lower()
+        if response in ["", "y", "yes"]:
+            install_mpv()
+            if not check_dependencies():
+                 print("Installation completed but 'mpv' is not yet in PATH.")
+                 print("Please restart your terminal/shell and try again.")
+                 sys.exit(1)
+        else:
+             print("MPV is required for Yit. Exiting.")
+             sys.exit(1)
+
+    parser = argparse.ArgumentParser(description="Yit (YouTube in Terminal) - Fire-and-Forget Music Player")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Search
@@ -452,6 +581,13 @@ def main():
 
     parser_status = subparsers.add_parser("status", help="Show status")
     parser_status.set_defaults(func=cmd_status)
+    
+    # Agent Interface
+    parser_agent = subparsers.add_parser("agent", help="JSON output for AI agents")
+    parser_agent.set_defaults(func=cmd_agent)
+
+    parser_cmds = subparsers.add_parser("commands", help="JSON command list for AI agents")
+    parser_cmds.set_defaults(func=cmd_commands)
 
     # Loop
     subparsers.add_parser("loop", help="Loop current track").set_defaults(func=cmd_loop)
