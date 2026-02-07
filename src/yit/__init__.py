@@ -39,8 +39,13 @@ def install_mpv():
             print("Please install mpv manually (e.g., sudo apt install mpv).")
             # Linux distros vary too much to auto-install safely without sudo
     except Exception as e:
-        print(f"Installation failed: {e}")
-        print("Please install mpv manually.")
+        print(f"Automatic installation failed: {e}")
+        print("Please install mpv manually from: https://mpv.io/installation/")
+        if system == "Windows":
+             print("Alternatively, try: winget search mpv")
+             try:
+                 subprocess.run(["start", "https://mpv.io/installation/"], shell=True)
+             except: pass
 
 def check_dependencies():
     """Checks if MPV is installed."""
