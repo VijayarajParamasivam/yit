@@ -57,8 +57,8 @@ yit stop     # Kill the player
 
 ### 3. Queue Management
 ```bash
-yit add 1    # Add result #1 from your last search to the queue
-yit queue    # Show the current playlist
+yit add 1    # Add result #1 from your last search to the queue (use 1 - 5 to choose from search results)
+yit queue    # Show the current queue
 yit next     # Skip track (or 'n')
 yit back     # Previous track (or 'b')
 yit clear    # Wipe the queue
@@ -72,7 +72,7 @@ yit unloop   # Return to normal playback
 
 ### 5. Status
 ```bash
-yit status   # Check if currently Playing/Paused/Looped
+yit status   # Check if currently Playing/Paused and Looped
 ```
 ---
 
