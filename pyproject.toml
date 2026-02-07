@@ -8,11 +8,15 @@ version = "0.1.0"
 description = "YouTube in Terminal - Fire-and-Forget Music CLI"
 readme = "README.md"
 authors = [{name = "Yit Team"}]
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 requires-python = ">=3.7"
 dependencies = [
     "yt-dlp>=2023.0.0",
 ]
+
+[project.urls]
+"Homepage" = "https://github.com/VijayarajParamasivam/yit"
+"Bug Tracker" = "https://github.com/VijayarajParamasivam/yit/issues"
 
 [project.scripts]
 yit = "yit:main"
