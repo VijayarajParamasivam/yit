@@ -68,9 +68,12 @@ yit clear    # Wipe the queue
 ```bash
 yit loop     # Loop the current track indefinitely
 yit unloop   # Return to normal playback
-yit status   # Check if [Looped]
 ```
 
+### 5. Status
+```bash
+yit status   # Check if currently Playing/Paused/Looped
+```
 ---
 
 ## 🤖 For AI Agents & Vibe Coding
