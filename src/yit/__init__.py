@@ -5,49 +5,114 @@ import platform
 import subprocess
 import sys
 import time
+import shutil
+import urllib.request
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
-# Constants
+# Check for py7zr (optional dependency handled gracefully)
+try:
+    import py7zr
+except ImportError:
+    py7zr = None
+
 # Constants
 YIT_DIR = Path.home() / ".yit"
+YIT_BIN = YIT_DIR / "bin"
 RESULTS_FILE = YIT_DIR / "results.json"
 HISTORY_FILE = YIT_DIR / "history.json"
+
+# Determined dynamically
+MPV_path = "mpv" 
 
 if os.name == 'nt':
     IPC_PIPE = r"\\.\pipe\yit_socket"
 else:
     IPC_PIPE = str(Path.home() / ".yit" / "socket")
 
+def download_file(url, dest):
+    print(f"Downloading {url}...")
+    with urllib.request.urlopen(url) as response, open(dest, 'wb') as out_file:
+        shutil.copyfileobj(response, out_file)
+    print("Download complete.")
+
 def install_mpv():
-    """Attempts to install MPV based on OS."""
+    """Downloads and installs MPV locally to ~/.yit/bin."""
     system = platform.system()
-    print(f"MPV not found. Attempting to install for {system}...")
+    if system != "Windows":
+        print("Automatic installation is currently only supported on Windows.")
+        print("Please install mpv manually (e.g., brew install mpv or apt install mpv).")
+        return
+
+    if not py7zr:
+        print("Error: 'py7zr' module is missing. Please run: pip install py7zr")
+        return
+
+    print(f"Installing MPV to {YIT_BIN}...")
+    ensure_yit_dir()
+    if not YIT_BIN.exists():
+        YIT_BIN.mkdir()
+
+    # URL for Shinchiro's MPV build (Stable, valid as of Feb 2026)
+    mpv_url = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/v20250125/mpv-x86_64-v3-20250125-git-9838038.7z"
+    archive_path = YIT_BIN / "mpv.7z"
 
     try:
-        if system == "Windows":
-            print("Running: winget install mpv.mpv")
-    except Exception as e:
-        print(f"Standard installation failed: {e}")
-        print("Attempting fallback install via MS Store ID...")
-        try:
-             # Try installing by specific ID (Unofficial MPV often found in Store)
-             subprocess.run(["winget", "install", "9P3JFR0CLLL6", "--accept-source-agreements", "--accept-package-agreements"], check=True)
-             print("Fallback installation successful.")
-             return
-        except Exception:
-             print("Automatic installation failed.")
+        download_file(mpv_url, archive_path)
+        
+        print("Extracting...")
+        with py7zr.SevenZipFile(archive_path, mode='r') as z:
+            z.extractall(path=YIT_BIN)
+        
+        # Cleanup
+        os.remove(archive_path)
+        
+        # Flattening: Find mpv.exe in subdirs and move to (YIT_BIN)
+        mpv_found = list(YIT_BIN.rglob("mpv.exe"))
+        if mpv_found:
+             src_exe = mpv_found[0]
+             # If it's in a subdir, move everything up
+             if src_exe.parent != YIT_BIN:
+                 print(f"Moving files from {src_exe.parent} to {YIT_BIN}...")
+                 for item in src_exe.parent.iterdir():
+                     try:
+                         shutil.move(str(item), str(YIT_BIN))
+                     except: pass # overwrite
+                 # Cleanup empty dir
+                 try:
+                     shutil.rmtree(str(src_exe.parent))
+                 except: pass
 
-        print("Please install mpv manually from: https://mpv.io/installation/")
-        if system == "Windows":
-             try:
-                 subprocess.run(["start", "https://mpv.io/installation/"], shell=True)
-             except: pass
+        # Verify
+        mpv_exe = YIT_BIN / "mpv.exe"
+        if mpv_exe.exists():
+            print(f"MPV installed successfully at {mpv_exe}")
+            global MPV_path
+            MPV_path = str(mpv_exe)
+        else:
+            print("Extraction failed: mpv.exe not found.")
+
+    except Exception as e:
+        print(f"Installation failed: {e}")
+        # Cleanup partial
+        if archive_path.exists():
+            os.remove(archive_path)
 
 def check_dependencies():
-    """Checks if MPV is installed."""
+    """Checks if MPV is installed (System or Local)."""
+    global MPV_path
+    
+    # 1. Check Local (~/.yit/bin/mpv.exe)
+    local_mpv = YIT_BIN / "mpv.exe"
+    if local_mpv.exists():
+        MPV_path = str(local_mpv)
+        return True
+
+    # 2. Check System PATH
     try:
         subprocess.run(["mpv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        MPV_path = "mpv"
         return True
     except FileNotFoundError:
         return False
@@ -55,8 +120,6 @@ def check_dependencies():
 def ensure_yit_dir():
     if not YIT_DIR.exists():
         YIT_DIR.mkdir()
-
-
 
 def save_to_history(track):
     """Saves a track to the persistent history file."""
@@ -125,30 +188,12 @@ def cmd_search(args):
     print(f"Searching for '{query}'...")
 
     # using yt-dlp via subprocess for simplicity and speed
-    # ytsearch5: gets 5 results
-    cmd = [
-        "yt-dlp",
-        "--print", "%(title)s|%(id)s",
-        "--flat-playlist",
-        f"ytsearch5:{query}"
-    ]
-
     try:
-        # Use full path to yt-dlp if needed, assuming it's in venv or path
-        # In this environment, we should rely on the venv activation or use sys.executable to find it
-        # But for now, let's assume 'yt-dlp' is in PATH or we use the one we just installed.
-        # Ideally, we should use the library, but subprocess is often more stable for simple "get strings"
-        
-        # Let's try to use the python library method to be cleaner if possible, 
-        # but subprocess is standard for this tool type.
-        
         # Use system yt-dlp since we are a package now
         yt_dlp_path = "yt-dlp"
         
-        
         command = [str(yt_dlp_path), "--print", "%(title)s||||%(webpage_url)s", "--flat-playlist", f"ytsearch5:{query}"]
 
-        
         result = subprocess.run(
             command,
             capture_output=True,
@@ -186,7 +231,7 @@ def cmd_search(args):
     except subprocess.CalledProcessError as e:
         print(f"Error searching: {e}")
     except Exception as e:
-        print(f"Unexpected error: {e}\nTry running the setup_installer.bat")
+        print(f"Unexpected error: {e}")
 
     if args.play and results:
         print("\nAuto-playing result #1...")
@@ -221,7 +266,7 @@ def cmd_play(args):
         else:
             # Spawn new
             cmd = [
-                "mpv",
+                MPV_path,
                 "--no-video",
                 "--idle",
                 "--cache=yes",
@@ -233,6 +278,7 @@ def cmd_play(args):
             ]
             # Prepare env with yt-dlp in path
             env = os.environ.copy()
+            # Try to add current python scripts path if not there
             yt_dlp_path = Path(sys.executable).parent
             env["PATH"] = str(yt_dlp_path) + os.pathsep + env["PATH"]
 
@@ -517,13 +563,13 @@ def cmd_commands(args):
 def main():
     if not check_dependencies():
         print("MPV is required but not found in PATH.")
-        print("Yit can attempt to install it for you.")
+        print("Yit can attempt to install it for you locally (~/.yit/bin).")
         response = input("Install MPV now? (Y/n): ").strip().lower()
         if response in ["", "y", "yes"]:
             install_mpv()
             if not check_dependencies():
-                 print("Installation completed but 'mpv' is not yet in PATH.")
-                 print("Please restart your terminal/shell and try again.")
+                 print("Installation completed but 'mpv' was not detected.")
+                 print("Please ensure your internet connection works and try again.")
                  sys.exit(1)
         else:
              print("MPV is required for Yit. Exiting.")
