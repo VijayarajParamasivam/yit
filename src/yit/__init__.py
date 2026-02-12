@@ -6,11 +6,16 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+import shutil
+import zipfile
+import tarfile
+import requests
 from types import SimpleNamespace
 
 # Constants
 # Constants
 YIT_DIR = Path.home() / ".yit"
+YIT_BIN = YIT_DIR / "bin"
 RESULTS_FILE = YIT_DIR / "results.json"
 HISTORY_FILE = YIT_DIR / "history.json"
 
@@ -19,36 +24,100 @@ if os.name == 'nt':
 else:
     IPC_PIPE = str(Path.home() / ".yit" / "socket")
 
-def install_mpv():
-    """Attempts to install MPV based on OS."""
+def get_mpv_path():
+    """Finds MPV or installs it (Windows only)."""
+    # 1. Check local bin (Windows priority for portability)
+    if os.name == 'nt':
+        local_mpv = YIT_BIN / "mpv.exe"
+        if local_mpv.exists():
+            return str(local_mpv)
+
+    # 2. Check PATH
+    if shutil.which("mpv"):
+        return "mpv"
+
+    # 3. Not found.
     system = platform.system()
-    print(f"MPV not found. Attempting to install for {system}...")
+    if system == "Windows":
+        print("MPV not found. Downloading portable MPV for Windows...")
+        return download_mpv_windows()
+    elif system == "Darwin":
+        print("MPV is required. Please run: brew install mpv")
+        sys.exit(1)
+    else:
+        print("MPV is required. Please install it (e.g., sudo apt install mpv).")
+        sys.exit(1)
 
+def download_mpv_windows():
+    if not YIT_BIN.exists(): YIT_BIN.mkdir(parents=True, exist_ok=True)
+    
     try:
-        if system == "Windows":
-            print("Running: winget install mpv.mpv")
-            subprocess.run(["winget", "install", "mpv.mpv"], check=True)
-            print("Installation complete. Please restart your terminal if Yit doesn't find it immediately.")
-        elif system == "Darwin": # macOS
-            if subprocess.run(["which", "brew"], capture_output=True).returncode == 0:
-                print("Running: brew install mpv")
-                subprocess.run(["brew", "install", "mpv"], check=True)
-            else:
-                print("Homebrew not found. Please install mpv manually: brew install mpv")
-        elif system == "Linux":
-            print("Please install mpv manually (e.g., sudo apt install mpv).")
-            # Linux distros vary too much to auto-install safely without sudo
+        # Fetch latest release
+        print("Fetching latest MPV release info...")
+        api_url = "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest"
+        resp = requests.get(api_url)
+        resp.raise_for_status()
+        assets = resp.json().get("assets", [])
+        
+        url = None
+        # Prefer main build (mpv-x86_64...) over dev
+        for asset in assets:
+            if asset["name"].startswith("mpv-x86_64") and asset["name"].endswith(".7z") and "v3" in asset["name"]:
+                url = asset["browser_download_url"]
+                break
+        
+        if not url:
+            for asset in assets:
+                 if asset["name"].startswith("mpv-x86_64") and asset["name"].endswith(".7z"):
+                    url = asset["browser_download_url"]
+                    break
+        
+        if not url:
+            raise Exception("No suitable MPV build (mpv-x86_64*.7z) found in latest release.")
+
+        print(f"Downloading {url}...")
+        archive_path = YIT_BIN / "mpv.7z"
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(archive_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        
+        print("Extracting...")
+        print("Extracting (using system tar)...")
+        try:
+            # Modern Windows (10 build 17063+) has native tar
+            subprocess.run(["tar", "-xf", str(archive_path), "-C", str(YIT_BIN)], check=True)
+        except Exception as e:
+             print(f"Error extracting: {e}")
+             print("Please install standard 7-Zip or run 'winget install mpv.mpv'")
+             sys.exit(1)
+            
+        # Flatten: Find mpv.exe and move to YIT_BIN
+        found = list(YIT_BIN.rglob("mpv.exe"))
+        if not found:
+            raise Exception("mpv.exe not found in extracted archive.")
+            
+        mpv_exe = found[0]
+        if mpv_exe.parent != YIT_BIN:
+            print(f"Moving {mpv_exe} to {YIT_BIN}...")
+            # Move all files from that dir to YIT_BIN to satisfy dependencies? 
+            # Usually mpv.exe needs files next to it? No, it's usually portable.
+            # But let's verify. Shinchiro builds are usually standalone-ish folders.
+            # Let's move the executable.
+            shutil.move(str(mpv_exe), str(YIT_BIN / "mpv.exe"))
+            
+        try:
+            os.remove(archive_path)
+        except: pass
+        
+        print("MPV installed successfully.")
+        return str(YIT_BIN / "mpv.exe")
+        
     except Exception as e:
-        print(f"Installation failed: {e}")
-        print("Please install mpv manually.")
-
-def check_dependencies():
-    """Checks if MPV is installed."""
-    try:
-        subprocess.run(["mpv", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return True
-    except FileNotFoundError:
-        return False
+        print(f"Failed to auto-install MPV: {e}")
+        print("Please install it manually via 'winget install mpv.mpv'")
+        sys.exit(1)
 
 def ensure_yit_dir():
     if not YIT_DIR.exists():
@@ -218,8 +287,9 @@ def cmd_play(args):
              send_ipc_command({"command": ["set_property", "pause", False]})
         else:
             # Spawn new
+            mpv_exe = get_mpv_path()
             cmd = [
-                "mpv",
+                mpv_exe,
                 "--no-video",
                 "--idle",
                 "--cache=yes",
@@ -513,19 +583,13 @@ def cmd_commands(args):
     print(json.dumps(cmds, indent=2))
 
 def main():
-    if not check_dependencies():
-        print("MPV is required but not found in PATH.")
-        print("Yit can attempt to install it for you.")
-        response = input("Install MPV now? (Y/n): ").strip().lower()
-        if response in ["", "y", "yes"]:
-            install_mpv()
-            if not check_dependencies():
-                 print("Installation completed but 'mpv' is not yet in PATH.")
-                 print("Please restart your terminal/shell and try again.")
-                 sys.exit(1)
-        else:
-             print("MPV is required for Yit. Exiting.")
-             sys.exit(1)
+    # Ensure MPV is available (auto-install on Windows if needed)
+    # checking this once here avoids checks later, although get_mpv_path caches fairly well?
+    # get_mpv_path checks file existence, which is fast.
+    try:
+        get_mpv_path()
+    except SystemExit:
+        return # already printed error
 
     parser = argparse.ArgumentParser(description="Yit (YouTube in Terminal) - Fire-and-Forget Music Player")
     subparsers = parser.add_subparsers(dest="command", required=True)

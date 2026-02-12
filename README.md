@@ -29,10 +29,9 @@ pip install yit-player
 ```
 
 ### Requirements
-Yit uses **[mpv](https://mpv.io/)** as its audio engine.
-*   **Windows**: Yit will attempt to auto-install it via `winget` if missing.
-*   **macOS**: `brew install mpv`
-*   **Linux**: `sudo apt install mpv` (or your distro's equivalent).
+*   **None!** Yit automatically manages the `mpv` audio engine internally. 
+*   **Windows**: Auto-downloads a portable `mpv.exe` if missing.
+*   **Mac/Linux**: Uses system MPV (install via `brew` or `apt` if needed).
 
 ---
 
