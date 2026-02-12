@@ -29,10 +29,8 @@ pip install yit-player
 ```
 
 ### Requirements
-Yit uses **[mpv](https://mpv.io/)** as its audio engine.
-*   **Windows**: Yit will attempt to auto-install it via `winget` if missing.
-*   **macOS**: `brew install mpv`
-*   **Linux**: `sudo apt install mpv` (or your distro's equivalent).
+Yit uses **[python-mpv](https://github.com/jaseg/python-mpv)**.
+*   **Zero-Config**: Yit automatically manages the `libmpv` audio engine internally. No manual installation required!
 
 ---
 
@@ -104,6 +102,6 @@ If you are building an AI agent or using an LLM in your IDE:
 ## 🛠️ Architecture
 
 *   **Client**: Python CLI (`yit`) handles argument parsing and user signals.
-*   **Daemon**: A detached `mpv` process handles audio decoding and network streaming.
+*   **Daemon**: A hidden Python process consuming `libmpv` handles audio decoding and playback logic.
 *   **Communication**: IPC (Inter-Process Communication) via Named Pipes (Windows) or Unix Sockets (Linux/Mac).
 *   **Persistence**: `~/.yit/history.json` stores your playback history and queue metadata.
