@@ -33,6 +33,13 @@ pip install yit-player
 *   **Windows**: Auto-downloads a portable `mpv.exe` if missing.
 *   **Mac/Linux**: Uses system MPV (install via `brew` or `apt` if needed).
 
+### Troubleshooting: "Command not found"
+If you run `yit` and get an error, your Python scripts folder is not in your system PATH.
+**Solution:** Run it like this instead (works 100% of the time):
+```bash
+python -m yit search "lofi" -p
+```
+
 ---
 
 ## ⚡ Quick Start
