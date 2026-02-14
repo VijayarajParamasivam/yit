@@ -33,7 +33,7 @@ pip install yit-player
 *   **Windows**: Auto-downloads a portable `mpv.exe` if missing.
 *   **Mac/Linux**: Uses system MPV (install via `brew` or `apt` if needed).
 
-### Troubleshooting: "Command not found"
+### Troubleshooting: "Command/Path not found"
 If you run `yit` and get an error, your Python scripts folder is not in your system PATH.
 **Solution:** Run it like this instead (works 100% of the time):
 ```bash
@@ -113,3 +113,24 @@ If you are building an AI agent or using an LLM in your IDE:
 *   **Daemon**: A detached `mpv` process handles audio decoding and network streaming.
 *   **Communication**: IPC (Inter-Process Communication) via Named Pipes (Windows) or Unix Sockets (Linux/Mac).
 *   **Persistence**: `~/.yit/history.json` stores your playback history and queue metadata.
+
+---
+
+## ⚠️ Disclaimer and Legal Notice
+
+**1. Educational Purpose Only**
+This software (`Yit`) is a proof-of-concept project designed strictly for **educational and research purposes**. Its primary goal is to demonstrate:
+* Advanced Python subprocess management and Daemon architecture.
+* Inter-Process Communication (IPC) using sockets and named pipes.
+* Memory-efficient resource management in CLI environments.
+
+**2. Third-Party Content**
+This tool acts as a command-line interface (CLI) wrapper for open-source media engines (`mpv`) and network libraries (`yt-dlp`).
+* **No Content Hosting:** This application does not host, store, distribute, or decrypt any copyrighted media content.
+* **Streaming Only:** It is designed for transient streaming of publicly available content. It does not include features to permanently download or "rip" media to the disk.
+
+**3. Terms of Service**
+Users are responsible for ensuring their use of this tool complies with the Terms of Service of any third-party platforms they interact with (e.g., YouTube, SoundCloud). The developer of this tool assumes no liability for misuse, account suspensions, or legal consequences arising from the use of this software.
+
+**4. No Monetization**
+This project is **free and open-source**. It is not monetized in any way, nor does it generate revenue from the content it accesses.
