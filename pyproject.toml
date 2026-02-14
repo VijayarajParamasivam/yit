@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "yit-player"
 version = "0.1.8"
-description = "YouTube in Terminal - Fire-and-Forget Music CLI"
+description = "Fire-and-Forget Music CLI"
 readme = "README.md"
 authors = [{name = "Yit Team"}]
 license = {text = "GPL-3.0-or-later"}

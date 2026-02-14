@@ -1,7 +1,7 @@
 # Yit - Agent Context & Instructions
 
 ## Project Overview
-**Yit** (Your Instant Terminal) is a headless, CLI-based music player for Windows. It uses `mpv` as the audio engine and `yt-dlp` for media resolution. The architecture separates the client (CLI) from the daemon (background mpv process).
+**Yit** is a headless, CLI-based music player for Windows. It uses `mpv` as the audio engine and `yt-dlp` for media resolution. The architecture separates the client (CLI) from the daemon (background mpv process).
 
 ## Agent Interaction Protocol
 
