@@ -151,6 +151,35 @@ def save_to_history(track):
     except Exception as e:
         print(f"Warning: Could not save history: {e}")
 
+class SocketWrapper:
+    """Wraps a socket to behave like a file object (read/write/flush)."""
+    def __init__(self, sock):
+        self.sock = sock
+        self.r_file = sock.makefile("rb", buffering=0)
+        self.w_file = sock.makefile("wb", buffering=0)
+
+    def write(self, data):
+        self.w_file.write(data)
+
+    def flush(self):
+        self.w_file.flush()
+
+    def readline(self):
+        return self.r_file.readline()
+
+    def close(self):
+        try:
+            self.r_file.close()
+            self.w_file.close()
+            self.sock.close()
+        except: pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
 def connect_ipc():
     """Connects to the MPV IPC."""
     if os.name == 'nt':
@@ -158,7 +187,7 @@ def connect_ipc():
     else:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(IPC_PIPE)
-        return sock.makefile("r+b", buffering=0)
+        return SocketWrapper(sock)
 
 def send_ipc_command(command):
     """Sends a JSON-formatted command to the MPV IPC pipe."""
