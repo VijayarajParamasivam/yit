@@ -1,4 +1,4 @@
-# Yit (YouTube in Terminal) Player 🎵
+# Yit (No Tabs. Just Tunes.) Player 🎵
 
 [![PyPI version](https://badge.fury.io/py/yit-player.svg)](https://badge.fury.io/py/yit-player)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -6,7 +6,7 @@
 
 **The Fire-and-Forget Music Player for Developers.**
 
-Yit (YouTube in Terminal) is a lightweight, headless, terminal-based audio player designed for flow states. It allows you to search, queue, and control music directly from your CLI without ever touching a browser or a heavy GUI.
+Yit is a lightweight, headless, terminal-based audio player designed for flow states. It allows you to search, queue, and control music directly from your CLI without ever touching a browser or a heavy GUI.
 
 It runs in the background (daemonized), meaning you can close your terminal, switch tabs, or keep coding while the music plays.
 
@@ -130,7 +130,7 @@ This tool acts as a command-line interface (CLI) wrapper for open-source media e
 * **Streaming Only:** It is designed for transient streaming of publicly available content. It does not include features to permanently download or "rip" media to the disk.
 
 **3. Terms of Service**
-Users are responsible for ensuring their use of this tool complies with the Terms of Service of any third-party platforms they interact with (e.g., YouTube, SoundCloud). The developer of this tool assumes no liability for misuse, account suspensions, or legal consequences arising from the use of this software.
+Users are responsible for ensuring their use of this tool complies with the Terms of Service of any third-party platforms they interact with. The developer of this tool assumes no liability for misuse, account suspensions, or legal consequences arising from the use of this software.
 
 **4. No Monetization**
 This project is **free and open-source**. It is not monetized in any way, nor does it generate revenue from the content it accesses.
