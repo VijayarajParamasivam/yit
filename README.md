@@ -137,7 +137,7 @@ This project is **free and open-source**. It is not monetized in any way, nor do
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 (GPLv3). This ensures the software remains free and open-source. Commercial distribution of this software as a closed-source product is strictly prohibited.
 
 ## Contact
 

@@ -1,3 +1,4 @@
+# Copyright (C) 2026 Vijayaraj Paramasivam. Licensed under the GNU GPLv3.
 import argparse
 import json
 import os
