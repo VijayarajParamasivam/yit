@@ -37,7 +37,7 @@ pip install yit-player
 If you run `yit` and get an error, your Python scripts folder is not in your system PATH.
 **Solution:** Run it like this instead (works 100% of the time):
 ```bash
-python -m yit search "lofi" -p
+python -m yit search "slava funk" -p
 ```
 
 ---
@@ -47,10 +47,10 @@ python -m yit search "lofi" -p
 ### 1. Search & Play
 ```bash
 # Search for a song
-yit search "lofi hip hop"
+yit search "funk sigilo"
 
 # Auto-play the first result immediately
-yit search "daft punk" -p
+yit search "funk infernal" -p
 ```
 
 ### 2. Control Playback
@@ -134,3 +134,11 @@ Users are responsible for ensuring their use of this tool complies with the Term
 
 **4. No Monetization**
 This project is **free and open-source**. It is not monetized in any way, nor does it generate revenue from the content it accesses.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contact
+
+For any questions, please contact [vijayaraj.devworks@gmail.com](mailto:vijayaraj.devworks@gmail.com).
