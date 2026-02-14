@@ -10,19 +10,18 @@ import shutil
 import zipfile
 import tarfile
 import requests
+import socket
 from types import SimpleNamespace
 
-# Constants
 # Constants
 YIT_DIR = Path.home() / ".yit"
 YIT_BIN = YIT_DIR / "bin"
 RESULTS_FILE = YIT_DIR / "results.json"
 HISTORY_FILE = YIT_DIR / "history.json"
+IPC_PIPE = str(YIT_DIR / "socket") # Unified path name, handled differently by OS
 
 if os.name == 'nt':
     IPC_PIPE = r"\\.\pipe\yit_socket"
-else:
-    IPC_PIPE = str(Path.home() / ".yit" / "socket")
 
 def get_mpv_path():
     """Finds MPV or installs it (Windows only)."""
@@ -152,18 +151,28 @@ def save_to_history(track):
     except Exception as e:
         print(f"Warning: Could not save history: {e}")
 
+def connect_ipc():
+    """Connects to the MPV IPC."""
+    if os.name == 'nt':
+        return open(IPC_PIPE, "r+b", buffering=0)
+    else:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(IPC_PIPE)
+        return sock.makefile("r+b", buffering=0)
+
 def send_ipc_command(command):
     """Sends a JSON-formatted command to the MPV IPC pipe."""
     try:
-        with open(IPC_PIPE, "r+b", buffering=0) as f:
+        with connect_ipc() as f:
             payload = json.dumps(command).encode("utf-8") + b"\n"
             f.write(payload)
+            f.flush() # Essential for socket
             response_line = f.readline().decode("utf-8")
             if response_line:
                 return json.loads(response_line)
             return {"error": "no_response"}
-    except FileNotFoundError:
-        print("Yit is not running.")
+    except (FileNotFoundError, ConnectionRefusedError, OSError):
+        # On Linux, OSError might be "Connection refused" or "No such file"
         return None
     except Exception as e:
         print(f"Error communicating with player: {e}")
@@ -172,15 +181,16 @@ def send_ipc_command(command):
 def get_ipc_property(prop):
     """Gets a property from MPV."""
     try:
-        with open(IPC_PIPE, "r+b", buffering=0) as f:
+        with connect_ipc() as f:
             cmd = {"command": ["get_property", prop]}
             payload = json.dumps(cmd).encode("utf-8") + b"\n"
             f.write(payload)
+            f.flush()
             
             # Simple read line
             response = f.readline().decode("utf-8")
             return json.loads(response)
-    except FileNotFoundError:
+    except (FileNotFoundError, ConnectionRefusedError, OSError):
         return None
     except Exception:
         return None
