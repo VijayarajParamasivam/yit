@@ -80,8 +80,6 @@ yit unloop   # Return to normal playback
 ```bash
 yit status   # Check if currently Playing/Paused and Looped
 ```
-yit status   # Check if currently Playing/Paused and Looped
-```
 
 ### 6. Favorites (❤️)
 Save your best tracks for later.
