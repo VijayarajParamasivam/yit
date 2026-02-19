@@ -296,10 +296,10 @@ def cmd_search(args):
     except Exception as e:
         print(f"Unexpected error: {e}\nTry running the setup_installer.bat")
 
-        if args.play and results:
-            print("\nAuto-playing result #1...")
-            # Create a simple namespace to simulate args for cmd_play
-            cmd_play(SimpleNamespace(number=1))
+    if args.play and results:
+        print("\nAuto-playing result #1...")
+        # Create a simple namespace to simulate args for cmd_play
+        cmd_play(SimpleNamespace(number=1))
 
 def play_tracks(tracks):
     """Plays a list of tracks (dicts with 'url' and 'title')."""
