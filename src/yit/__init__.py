@@ -20,6 +20,7 @@ YIT_BIN = YIT_DIR / "bin"
 RESULTS_FILE = YIT_DIR / "results.json"
 HISTORY_FILE = YIT_DIR / "history.json"
 IPC_PIPE = str(YIT_DIR / "socket") # Unified path name, handled differently by OS
+FAV_FILE = YIT_DIR / "favorites.json"
 
 if os.name == 'nt':
     IPC_PIPE = r"\\.\pipe\yit_socket"
@@ -295,9 +296,75 @@ def cmd_search(args):
     except Exception as e:
         print(f"Unexpected error: {e}\nTry running the setup_installer.bat")
 
-    if args.play and results:
-        print("\nAuto-playing result #1...")
-        cmd_play(SimpleNamespace(number=1))
+        if args.play and results:
+            print("\nAuto-playing result #1...")
+            # Create a simple namespace to simulate args for cmd_play
+            cmd_play(SimpleNamespace(number=1))
+
+def play_tracks(tracks):
+    """Plays a list of tracks (dicts with 'url' and 'title')."""
+    if not tracks: return
+
+    first_track = tracks[0]
+    print(f"Playing: {first_track['title']}")
+    if len(tracks) > 1:
+        print(f"...and {len(tracks)-1} others queued.")
+
+    save_to_history(first_track)
+    
+    # Try to load into existing player
+    # If it's a list, we usually replace the queue
+    # Check if running first
+    is_running = send_ipc_command({"command": ["get_property", "idle-active"]})
+    
+    if is_running and is_running.get("error") == "success":
+         print("Added to existing player.")
+         # Replace current with first
+         send_ipc_command({"command": ["loadfile", first_track["url"], "replace"]})
+         send_ipc_command({"command": ["set_property", "pause", False]})
+         
+         # Append the rest
+         for t in tracks[1:]:
+             send_ipc_command({"command": ["loadfile", t["url"], "append"]})
+    else:
+        # Spawn new
+        mpv_exe = get_mpv_path()
+        cmd = [
+            mpv_exe,
+            "--no-video",
+            "--idle",
+            "--cache=yes",
+            "--prefetch-playlist=yes",
+            "--demuxer-max-bytes=128M",
+            "--demuxer-max-back-bytes=128M",
+            f"--input-ipc-server={IPC_PIPE}"
+        ]
+        
+        # Add all URLs
+        for t in tracks:
+            cmd.append(t["url"])
+
+        # Prepare env with yt-dlp in path
+        env = os.environ.copy()
+        yt_dlp_path = Path(sys.executable).parent
+        env["PATH"] = str(yt_dlp_path) + os.pathsep + env["PATH"]
+
+        # Prepare subprocess args based on OS
+        kwargs = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "env": env,
+            "close_fds": True
+        }
+
+        if os.name == 'nt':
+            kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            kwargs["start_new_session"] = True
+
+        # Detach process
+        subprocess.Popen(cmd, **kwargs)
+        print("Player started in background.")
 
 def cmd_play(args):
     """Plays the selected track number."""
@@ -315,51 +382,7 @@ def cmd_play(args):
             return
 
         track = results[idx]
-        print(f"Playing: {track['title']}")
-        save_to_history(track)
-        
-        # Check if running
-        is_running = send_ipc_command({"command": ["loadfile", track["url"]]})
-        
-        if is_running:
-             print("Added to existing player.")
-             # Ensure it plays immediately even if previously paused
-             send_ipc_command({"command": ["set_property", "pause", False]})
-        else:
-            # Spawn new
-            mpv_exe = get_mpv_path()
-            cmd = [
-                mpv_exe,
-                "--no-video",
-                "--idle",
-                "--cache=yes",
-                "--prefetch-playlist=yes",
-                "--demuxer-max-bytes=128M",
-                "--demuxer-max-back-bytes=128M",
-                f"--input-ipc-server={IPC_PIPE}",
-                track["url"]
-            ]
-            # Prepare env with yt-dlp in path
-            env = os.environ.copy()
-            yt_dlp_path = Path(sys.executable).parent
-            env["PATH"] = str(yt_dlp_path) + os.pathsep + env["PATH"]
-
-            # Prepare subprocess args based on OS
-            kwargs = {
-                "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL,
-                "env": env,
-                "close_fds": True
-            }
-
-            if os.name == 'nt':
-                kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-            else:
-                kwargs["start_new_session"] = True
-
-            # Detach process
-            subprocess.Popen(cmd, **kwargs)
-            print("Player started in background.")
+        play_tracks([track])
 
     except Exception as e:
         print(f"Error playing: {e}")
@@ -618,9 +641,115 @@ def cmd_commands(args):
         {"cmd": "status", "usage": "yit status", "desc": "Show playback status (text)."},
         {"cmd": "agent", "usage": "yit agent", "desc": "Get full system state (JSON)."},
         {"cmd": "commands", "usage": "yit commands", "desc": "Get this list (JSON)."},
-        {"cmd": "0", "usage": "yit 0", "desc": "Replay current track."}
+        {"cmd": "0", "usage": "yit 0", "desc": "Replay current track."},
+        {"cmd": "fav", "usage": "yit fav [add|play|list|remove]", "desc": "Manage favorites."}
     ]
     print(json.dumps(cmds, indent=2))
+
+def load_favorites():
+    if not FAV_FILE.exists():
+        return []
+    try:
+        with open(FAV_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_favorites(favs):
+    ensure_yit_dir()
+    with open(FAV_FILE, "w") as f:
+        json.dump(favs, f, indent=4)
+
+def cmd_fav(args):
+    """Handles favorites commands."""
+    favs = load_favorites()
+
+    if args.action == "list":
+        if not favs:
+            print("No favorites yet.")
+            return
+        print("\nFavorites:")
+        for i, track in enumerate(favs):
+            print(f"{i+1}. {track['title']}")
+    
+    elif args.action == "add":
+        track_to_add = None
+        
+        # Add from search results (by index)
+        if args.target:
+             if not RESULTS_FILE.exists():
+                print("No search results found.")
+                return
+             try:
+                 with open(RESULTS_FILE, "r") as f:
+                     results = json.load(f)
+                 idx = int(args.target) - 1
+                 if 0 <= idx < len(results):
+                     track_to_add = results[idx]
+                 else:
+                     print("Invalid index.")
+                     return
+             except Exception as e:
+                 print(f"Error reading results: {e}")
+                 return
+        
+        # Add currently playing song
+        else:
+            path_resp = get_ipc_property("path")
+            title_resp = get_ipc_property("media-title")
+            
+            # Note: 'path' can be a URL or filename
+            if path_resp and path_resp.get("data") and title_resp and title_resp.get("data"):
+                 track_to_add = {"title": title_resp["data"], "url": path_resp["data"]}
+            else:
+                print("No track selected or playing. Specify an index from search results or play a song first.")
+                return
+
+        if track_to_add:
+            # Check duplicates (by URL)
+            if any(f["url"] == track_to_add["url"] for f in favs):
+                print(f"Already in favorites: {track_to_add['title']}")
+            else:
+                favs.append(track_to_add)
+                save_favorites(favs)
+                print(f"Added to favorites: {track_to_add['title']}")
+
+    elif args.action == "remove":
+        if not args.target:
+            print("Specify an index to remove (run 'yit fav list').")
+            return
+        try:
+            idx = int(args.target) - 1
+            if 0 <= idx < len(favs):
+                removed = favs.pop(idx)
+                save_favorites(favs)
+                print(f"Removed: {removed['title']}")
+            else:
+                print("Invalid index.")
+        except ValueError:
+            print("Invalid index found (must be a number).")
+
+    elif args.action == "play":
+        if not favs:
+            print("No favorites to play.")
+            return
+
+        # Play specific index
+        if args.target:
+            try:
+                idx = int(args.target) - 1
+                if 0 <= idx < len(favs):
+                    track = favs[idx]
+                    play_tracks([track])
+                else:
+                    print("Invalid index.")
+            except ValueError:
+                print("Invalid index.")
+        
+        # Play ALL
+        else:
+            print(f"Playing all {len(favs)} favorites...")
+            play_tracks(favs)
 
 def main():
     # Ensure MPV is available (auto-install on Windows if needed)
@@ -692,6 +821,14 @@ def main():
 
     parser_cmds = subparsers.add_parser("commands", help="JSON command list for AI agents")
     parser_cmds.set_defaults(func=cmd_commands)
+
+    # Favorites
+    parser_fav = subparsers.add_parser("fav", help="Manage favorites")
+    # Sub-arguments for fav: action (add, list, play, remove) and target (index)
+    # We use nargs='?' for action to support 'yit fav' -> list
+    parser_fav.add_argument("action", nargs="?", default="list", choices=["add", "list", "play", "remove"], help="Action to perform")
+    parser_fav.add_argument("target", nargs="?", help="Index (for add/play/remove)")
+    parser_fav.set_defaults(func=cmd_fav)
 
     # Loop
     subparsers.add_parser("loop", help="Loop current track").set_defaults(func=cmd_loop)

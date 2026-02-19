@@ -80,6 +80,28 @@ yit unloop   # Return to normal playback
 ```bash
 yit status   # Check if currently Playing/Paused and Looped
 ```
+yit status   # Check if currently Playing/Paused and Looped
+```
+
+### 6. Favorites (❤️)
+Save your best tracks for later.
+
+```bash
+# list all favorites
+yit fav
+
+# Add to favorites
+yit fav add        # Add the CURRENTLY playing song
+yit fav add 1      # Add result #1 from your last search
+
+# Play favorites
+yit fav play       # Play ALL favorites (starting from #1)
+yit fav play 3     # Play favorite #3
+
+# Remove
+yit fav remove 2   # Remove favorite #2
+```
+
 ---
 
 ## 🤖 For AI Agents & Vibe Coding
