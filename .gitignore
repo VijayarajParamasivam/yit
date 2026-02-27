@@ -18,3 +18,7 @@ q.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# Tests
+test_cli_commands.py
+
