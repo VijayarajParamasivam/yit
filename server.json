@@ -1,0 +1,11 @@
+{
+  "name": "yit-mcp",
+  "description": "Model Context Protocol (MCP) server for Yit Player. Allows AI agents to seamlessly control music playback, search YouTube, and manage playlists using natural language.",
+  "runtime": "python",
+  "command": "uvx",
+  "args": [
+    "yit-mcp"
+  ],
+  "author": "VijayarajParamasivam",
+  "repo": "https://github.com/VijayarajParamasivam/yit"
+}

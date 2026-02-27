@@ -125,6 +125,24 @@ If you are building an AI agent or using an LLM in your IDE:
 }
 ```
 
+### Installation for Claude Desktop & AI IDEs (MCP)
+
+Yit includes a built-in Model Context Protocol (MCP) server (`yit-mcp`). You can easily connect Yit to any supported AI IDE or desktop agent.
+
+Add the following JSON configuration block to your client's MCP config file (e.g., `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "yit-player": {
+      "command": "uvx",
+      "args": ["yit-mcp"]
+    }
+  }
+}
+```
+*Note: This uses `uvx` to automatically run the latest version of the server.*
+
 ---
 
 ## 🛠️ Architecture
@@ -162,3 +180,5 @@ This project is licensed under the GNU General Public License v3.0 (GPLv3). This
 ## Contact
 
 For any questions, please contact [vijayaraj.devworks@gmail.com](mailto:vijayaraj.devworks@gmail.com).
+
+<!-- mcp-name: VijayarajParamasivam/yit-player -->
