@@ -20,5 +20,5 @@ q.txt
 Thumbs.db
 
 # Tests
-test_cli_commands.py
+tests/
 

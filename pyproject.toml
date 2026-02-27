@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "yit-player"
-version = "2.0.5"
+version = "3.0.1"
 description = "Fire-and-Forget Music CLI"
 readme = "README.md"
 authors = [{name = "Yit Team"}]
@@ -17,7 +17,8 @@ classifiers = [
 requires-python = ">=3.7"
 dependencies = [
     "yt-dlp>=2023.0.0",
-    "requests"
+    "requests",
+    "mcp"
 ]
 
 [project.urls]
@@ -26,6 +27,7 @@ dependencies = [
 
 [project.scripts]
 yit = "yit:main"
+yit-mcp = "yit.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/yit"]
