@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "yit-player"
-version = "3.0.3"
+version = "3.0.4"
 description = "Fire-and-Forget Music CLI"
 readme = "README.md"
 authors = [{name = "Yit Team"}]
