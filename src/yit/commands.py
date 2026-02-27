@@ -35,7 +35,8 @@ def cmd_search(args):
             text=True,
             encoding='utf-8',
             errors='replace',
-            check=False
+            check=False,
+            stdin=subprocess.DEVNULL
         )
         
         if result.returncode != 0:
@@ -111,6 +112,7 @@ def play_tracks(tracks):
         env["PATH"] = str(yt_dlp_path) + os.pathsep + env["PATH"]
 
         kwargs = {
+            "stdin": subprocess.DEVNULL,
             "stdout": subprocess.DEVNULL,
             "stderr": subprocess.DEVNULL,
             "env": env,
