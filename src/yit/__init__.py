@@ -346,15 +346,13 @@ def cmd_search(args):
         with open(RESULTS_FILE, "w") as f:
             json.dump(results, f, indent=4)
 
-    except subprocess.CalledProcessError as e:
-        print(f"Error searching: {e}")
     except Exception as e:
         print(f"Unexpected error: {e}\nTry running the setup_installer.bat")
 
-        if args.play and results:
-            print("\nAuto-playing result #1...")
-            # Create a simple namespace to simulate args for cmd_play
-            cmd_play(SimpleNamespace(number=1))
+    if getattr(args, 'play', False) and results:
+        print("\nAuto-playing result #1...")
+        # Create a simple namespace to simulate args for cmd_play
+        cmd_play(SimpleNamespace(number=1))
 
 def play_tracks(tracks):
     """Plays a list of tracks (dicts with 'url' and 'title')."""
@@ -822,7 +820,7 @@ def main():
     except SystemExit:
         return # already printed error
 
-    parser = argparse.ArgumentParser(description="Yit (YouTube in Terminal) - Fire-and-Forget Music Player")
+    parser = argparse.ArgumentParser(prog="yit", description="Yit (YouTube in Terminal) - Fire-and-Forget Music Player")
     parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {__version__}")
     
     subparsers = parser.add_subparsers(dest="command", required=True)
