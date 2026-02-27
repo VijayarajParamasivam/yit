@@ -12,7 +12,14 @@ import zipfile
 import tarfile
 import requests
 import socket
+import threading
 from types import SimpleNamespace
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("yit-player")
+except PackageNotFoundError:
+    __version__ = "unknown"
 
 # Constants
 YIT_DIR = Path.home() / ".yit"
@@ -21,9 +28,57 @@ RESULTS_FILE = YIT_DIR / "results.json"
 HISTORY_FILE = YIT_DIR / "history.json"
 IPC_PIPE = str(YIT_DIR / "socket") # Unified path name, handled differently by OS
 FAV_FILE = YIT_DIR / "favorites.json"
+UPDATE_FILE = YIT_DIR / "update.json"
 
 if os.name == 'nt':
     IPC_PIPE = r"\\.\pipe\yit_socket"
+
+def check_for_updates():
+    """Checks PyPI for a newer version once a day in a background thread."""
+    def _check():
+        try:
+            now = time.time()
+            # Enforce 24h cache (86400 seconds)
+            if UPDATE_FILE.exists():
+                try:
+                    with open(UPDATE_FILE, "r") as f:
+                        data = json.load(f)
+                        if now - data.get("last_checked", 0) < 86400:
+                            return
+                except: pass
+
+            resp = requests.get("https://pypi.org/pypi/yit-player/json", timeout=3)
+            resp.raise_for_status()
+            latest = resp.json()["info"]["version"]
+            
+            with open(UPDATE_FILE, "w") as f:
+                json.dump({"last_checked": now, "latest_version": latest}, f)
+        except Exception:
+            pass # Fail silently
+            
+    t = threading.Thread(target=_check, daemon=True)
+    t.start()
+
+def show_update_notice():
+    """Prints a non-blocking notice if an update is available."""
+    if __version__ == "unknown" or not UPDATE_FILE.exists():
+        return
+        
+    try:
+        with open(UPDATE_FILE, "r") as f:
+            data = json.load(f)
+            latest = data.get("latest_version")
+            if latest and _is_newer(latest, __version__):
+                print(f"\033[93m[Update Available: yit-player {latest}] Run `pip install --upgrade yit-player`\033[0m")
+    except Exception:
+        pass
+
+def _is_newer(latest, current):
+    """Simple semver comparison."""
+    try:
+        def pad(v): return [int(x) for x in v.split('.')] + [0,0,0]
+        return pad(latest)[:3] > pad(current)[:3]
+    except: return False
 
 def get_mpv_path():
     """Finds MPV or installs it (Windows only)."""
@@ -296,10 +351,10 @@ def cmd_search(args):
     except Exception as e:
         print(f"Unexpected error: {e}\nTry running the setup_installer.bat")
 
-    if args.play and results:
-        print("\nAuto-playing result #1...")
-        # Create a simple namespace to simulate args for cmd_play
-        cmd_play(SimpleNamespace(number=1))
+        if args.play and results:
+            print("\nAuto-playing result #1...")
+            # Create a simple namespace to simulate args for cmd_play
+            cmd_play(SimpleNamespace(number=1))
 
 def play_tracks(tracks):
     """Plays a list of tracks (dicts with 'url' and 'title')."""
@@ -752,15 +807,24 @@ def cmd_fav(args):
             play_tracks(favs)
 
 def main():
+    show_update_notice()
+    check_for_updates()
+
     # Ensure MPV is available (auto-install on Windows if needed)
     # checking this once here avoids checks later, although get_mpv_path caches fairly well?
     # get_mpv_path checks file existence, which is fast.
     try:
-        get_mpv_path()
+        if len(sys.argv) > 1 and sys.argv[1] in ("-v", "--version"):
+            # Don't block version check on mpv install
+            pass
+        else:
+            get_mpv_path()
     except SystemExit:
         return # already printed error
 
     parser = argparse.ArgumentParser(description="Yit (YouTube in Terminal) - Fire-and-Forget Music Player")
+    parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {__version__}")
+    
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Search
