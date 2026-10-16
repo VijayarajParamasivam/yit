@@ -57,7 +57,9 @@ def _mpv_command(tracks):
         f"--log-file={YIT_DIR / 'mpv.log'}",
         f"--input-ipc-server={IPC_PIPE}",
     ]
-    opts = [f"yit_tracker-log={PLAYS_LOG}"]
+    # all_formats=no: newer mpv builds default to loading every YouTube format and
+    # can pick a stream URL YouTube answers with 403; let yt-dlp choose one.
+    opts = [f"yit_tracker-log={PLAYS_LOG}", "ytdl_hook-all_formats=no"]
     ytdl = ytdlp.ytdlp_executable()
     if ytdl:
         opts.append(f"ytdl_hook-ytdl_path={ytdl}")
