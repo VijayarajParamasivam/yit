@@ -6,7 +6,8 @@ from .commands import (
     cmd_search, cmd_play, cmd_pause, cmd_resume, cmd_toggle,
     cmd_stop, cmd_loop, cmd_unloop, cmd_add, cmd_next, cmd_prev,
     cmd_restart, cmd_clear, cmd_queue, cmd_status, cmd_agent,
-    cmd_commands, cmd_fav
+    cmd_commands, cmd_fav, cmd_dj, cmd_radio, cmd_mix, cmd_like,
+    cmd_dislike, cmd_import, cmd_profile
 )
 
 def main():
@@ -96,6 +97,37 @@ def main():
     # Loop
     subparsers.add_parser("loop", help="Loop current track").set_defaults(func=cmd_loop)
     subparsers.add_parser("unloop", help="Stop looping").set_defaults(func=cmd_unloop)
+
+    # Jarvis: taste-aware playback
+    p = subparsers.add_parser("dj", help="Smart queue from your listening taste")
+    p.add_argument("--size", type=int, default=20, help="Number of tracks (default 20)")
+    p.add_argument("--discovery", type=float, default=0.4, help="Share of new-to-you songs, 0-1 (default 0.4)")
+    p.set_defaults(func=cmd_dj)
+
+    p = subparsers.add_parser("radio", help="Similar songs to the current track or a given song")
+    p.add_argument("seed", nargs="*", help="Song name or YouTube URL (default: current/top track)")
+    p.set_defaults(func=cmd_radio)
+
+    p = subparsers.add_parser("mix", help="Queue specific songs, e.g. yit mix \"Artist - Song\" \"Artist2 - Song2\"")
+    p.add_argument("songs", nargs="+")
+    p.add_argument("-a", "--append", action="store_true", help="Append instead of replacing the queue")
+    p.set_defaults(func=cmd_mix)
+
+    subparsers.add_parser("like", help="Like the current song").set_defaults(func=cmd_like)
+
+    p = subparsers.add_parser("dislike", help="Never play the current song again (and skip it)")
+    p.add_argument("--artist", action="store_true", help="Also block this artist")
+    p.add_argument("--keep", action="store_true", help="Don't skip the song now")
+    p.set_defaults(func=cmd_dislike)
+
+    p = subparsers.add_parser("profile", help="Show what yit has learned about your taste")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_profile)
+
+    p = subparsers.add_parser("import", help="Import Google Takeout YouTube Music watch history")
+    p.add_argument("file", help="watch-history.json (or .html) from Google Takeout")
+    p.add_argument("--all", action="store_true", help="Include regular YouTube, not just YouTube Music")
+    p.set_defaults(func=cmd_import)
 
     args = parser.parse_args()
     args.func(args)

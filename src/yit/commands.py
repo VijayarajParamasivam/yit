@@ -5,10 +5,13 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
-from .config import RESULTS_FILE, HISTORY_FILE, IPC_PIPE, ensure_yit_dir
+from .config import RESULTS_FILE, HISTORY_FILE, IPC_PIPE, PLAYS_LOG, ensure_yit_dir
 from .utils import extract_video_id
 from .ipc import send_ipc_command, get_ipc_property
-from .storage import save_to_history, load_favorites, save_favorites
+from .storage import save_to_history, load_favorites, save_favorites, remember_tracks, log_search
+from . import ytdlp
+
+TRACKER_SCRIPT = Path(__file__).with_name("tracker.lua")
 from .installer import get_mpv_path
 
 def cmd_search(args):
@@ -16,106 +19,88 @@ def cmd_search(args):
     ensure_yit_dir()
     query = " ".join(args.query)
     print(f"Searching for '{query}'...")
+    log_search(query)
 
-    cmd = [
-        "yt-dlp",
-        "--print", "%(title)s|%(id)s",
-        "--flat-playlist",
-        f"ytsearch5:{query}"
-    ]
-
+    results = []
     try:
-        yt_dlp_path = "yt-dlp"
-        
-        command = [str(yt_dlp_path), "--print", "%(title)s||||%(webpage_url)s", "--flat-playlist", f"ytsearch5:{query}"]
-        
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=False,
-            stdin=subprocess.DEVNULL
-        )
-        
-        if result.returncode != 0:
-            print(f"Error: yt-dlp returned {result.returncode}")
-            print(f"Stderr: {result.stderr}")
-            return
-
-        if result.stdout is None:
-            print("Error: stdout is None")
-            return
-
-        lines = result.stdout.strip().split('\n')
-        results = []
-        print("\nResults:")
-        for i, line in enumerate(lines):
-            if "||||" in line:
-                 title, url = line.split("||||", 1)
-                 print(f"{i+1}. {title}")
-                 results.append({"title": title, "url": url})
-        
-        if not results:
-            print("No results found.")
-            return
-
-        with open(RESULTS_FILE, "w") as f:
-            json.dump(results, f, indent=4)
-
+        results = ytdlp.search(query, 5)
     except Exception as e:
-        print(f"Unexpected error: {e}\nTry running the setup_installer.bat")
+        print(f"Search failed: {e}")
+        return
 
-    if getattr(args, 'play', False) and results:
+    if not results:
+        print("No results found.")
+        return
+
+    print("\nResults:")
+    for i, t in enumerate(results):
+        extra = f"  [{t['channel']}]" if t.get("channel") else ""
+        print(f"{i+1}. {t['title']}{extra}")
+
+    with open(RESULTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=4)
+
+    if getattr(args, 'play', False):
         print("\nAuto-playing result #1...")
         cmd_play(SimpleNamespace(number=1))
 
-def play_tracks(tracks):
-    """Plays a list of tracks (dicts with 'url' and 'title')."""
+def _mpv_command(tracks):
+    cmd = [
+        get_mpv_path(),
+        "--no-video",
+        "--idle",
+        "--cache=yes",
+        "--prefetch-playlist=yes",
+        "--demuxer-max-bytes=128M",
+        "--demuxer-max-back-bytes=128M",
+        f"--input-ipc-server={IPC_PIPE}",
+    ]
+    opts = [f"yit_tracker-log={PLAYS_LOG}"]
+    ytdl = ytdlp.ytdlp_executable()
+    if ytdl:
+        opts.append(f"ytdl_hook-ytdl_path={ytdl}")
+    if TRACKER_SCRIPT.exists():
+        cmd.append(f"--script={TRACKER_SCRIPT}")
+    cmd.append("--script-opts=" + ",".join(opts))
+    cmd += [t["url"] for t in tracks]
+    return cmd
+
+
+def play_tracks(tracks, append=False, source=None):
+    """Plays a list of tracks (dicts with 'url' and 'title').
+    append=True adds them after the current queue instead of replacing it."""
     if not tracks: return
 
+    remember_tracks(tracks, source=source)
     first_track = tracks[0]
-    print(f"Playing: {first_track['title']}")
-    if len(tracks) > 1:
-        print(f"...and {len(tracks)-1} others queued.")
+    if append:
+        print(f"Queueing {len(tracks)} track(s), starting with: {first_track['title']}")
+    else:
+        print(f"Playing: {first_track['title']}")
+        if len(tracks) > 1:
+            print(f"...and {len(tracks)-1} others queued.")
 
     save_to_history(first_track)
-    
+
     is_running = send_ipc_command({"command": ["get_property", "idle-active"]})
-    
+
     if is_running and is_running.get("error") == "success":
-         print("Added to existing player.")
-         send_ipc_command({"command": ["loadfile", first_track["url"], "replace"]})
-         send_ipc_command({"command": ["set_property", "pause", False]})
-         
-         for t in tracks[1:]:
-             send_ipc_command({"command": ["loadfile", t["url"], "append"]})
+        if append:
+            for t in tracks:
+                send_ipc_command({"command": ["loadfile", t["url"], "append-play"]})
+            print("Added to queue.")
+            return
+        print("Added to existing player.")
+        send_ipc_command({"command": ["loadfile", first_track["url"], "replace"]})
+        send_ipc_command({"command": ["set_property", "pause", False]})
+        for t in tracks[1:]:
+            send_ipc_command({"command": ["loadfile", t["url"], "append"]})
     else:
-        mpv_exe = get_mpv_path()
-        cmd = [
-            mpv_exe,
-            "--no-video",
-            "--idle",
-            "--cache=yes",
-            "--prefetch-playlist=yes",
-            "--demuxer-max-bytes=128M",
-            "--demuxer-max-back-bytes=128M",
-            f"--input-ipc-server={IPC_PIPE}"
-        ]
-        
-        for t in tracks:
-            cmd.append(t["url"])
-
-        env = os.environ.copy()
-        yt_dlp_path = Path(sys.executable).parent
-        env["PATH"] = str(yt_dlp_path) + os.pathsep + env["PATH"]
-
         kwargs = {
             "stdin": subprocess.DEVNULL,
             "stdout": subprocess.DEVNULL,
             "stderr": subprocess.DEVNULL,
-            "env": env,
+            "env": ytdlp.player_env(),
             "close_fds": True
         }
 
@@ -124,7 +109,7 @@ def play_tracks(tracks):
         else:
             kwargs["start_new_session"] = True
 
-        subprocess.Popen(cmd, **kwargs)
+        subprocess.Popen(_mpv_command(tracks), **kwargs)
         print("Player started in background.")
 
 def cmd_play(args):
@@ -133,7 +118,7 @@ def cmd_play(args):
         return
 
     try:
-        with open(RESULTS_FILE, "r") as f:
+        with open(RESULTS_FILE, "r", encoding="utf-8") as f:
             results = json.load(f)
         
         idx = args.number - 1
@@ -177,7 +162,7 @@ def cmd_add(args):
         return
 
     try:
-        with open(RESULTS_FILE, "r") as f:
+        with open(RESULTS_FILE, "r", encoding="utf-8") as f:
             results = json.load(f)
         
         idx = args.number - 1
@@ -242,13 +227,13 @@ def cmd_queue(args):
 
     if RESULTS_FILE.exists():
         try:
-            with open(RESULTS_FILE, "r") as f:
+            with open(RESULTS_FILE, "r", encoding="utf-8") as f:
                 load_into_maps(json.load(f))
         except Exception: pass
 
     if HISTORY_FILE.exists():
         try:
-            with open(HISTORY_FILE, "r") as f:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
                 load_into_maps(json.load(f))
         except Exception: pass
 
@@ -360,7 +345,14 @@ def cmd_commands(args):
         {"cmd": "agent", "usage": "yit agent", "desc": "Get full system state (JSON)."},
         {"cmd": "commands", "usage": "yit commands", "desc": "Get this list (JSON)."},
         {"cmd": "0", "usage": "yit 0", "desc": "Replay current track."},
-        {"cmd": "fav", "usage": "yit fav [add|play|list|remove]", "desc": "Manage favorites."}
+        {"cmd": "fav", "usage": "yit fav [add|play|list|remove]", "desc": "Manage favorites."},
+        {"cmd": "dj", "usage": "yit dj [--size N] [--discovery 0-1]", "desc": "Smart queue from your taste: favourites + new similar songs."},
+        {"cmd": "radio", "usage": "yit radio [song or url]", "desc": "Songs similar to the current track (or a given song)."},
+        {"cmd": "mix", "usage": "yit mix \"Artist - Song\" ...", "desc": "Queue a list of specific songs."},
+        {"cmd": "like", "usage": "yit like", "desc": "Like the current song (adds to favorites, boosts it)."},
+        {"cmd": "dislike", "usage": "yit dislike [--artist] [--keep]", "desc": "Never play this song (or artist) again; skips it."},
+        {"cmd": "profile", "usage": "yit profile [--json]", "desc": "What yit has learned about your taste."},
+        {"cmd": "import", "usage": "yit import <watch-history.json|html> [--all]", "desc": "Import Google Takeout YouTube Music history."}
     ]
     print(json.dumps(cmds, indent=2))
 
@@ -383,7 +375,7 @@ def cmd_fav(args):
                 print("No search results found.")
                 return
              try:
-                 with open(RESULTS_FILE, "r") as f:
+                 with open(RESULTS_FILE, "r", encoding="utf-8") as f:
                      results = json.load(f)
                  idx = int(args.target) - 1
                  if 0 <= idx < len(results):
@@ -447,3 +439,53 @@ def cmd_fav(args):
         else:
             print(f"Playing all {len(favs)} favorites...")
             play_tracks(favs)
+
+
+# --- Jarvis / taste commands --------------------------------------------------
+
+def cmd_dj(args):
+    from .dj import dj
+    print(dj(size=args.size, discovery=args.discovery))
+
+def cmd_radio(args):
+    from .dj import radio
+    print(radio(" ".join(args.seed) if args.seed else None))
+
+def cmd_mix(args):
+    from .dj import play_mix
+    print(play_mix(args.songs, replace=not args.append))
+
+def cmd_like(args):
+    from .dj import like_current
+    print(like_current())
+
+def cmd_dislike(args):
+    from .dj import dislike_current
+    print(dislike_current(block_artist=args.artist, skip=not args.keep))
+
+def cmd_import(args):
+    from .dj import import_takeout
+    print(import_takeout(args.file, include_all=args.all))
+
+def cmd_profile(args):
+    from .taste import build_profile
+    p = build_profile()
+    if args.json:
+        print(json.dumps(p, indent=2, ensure_ascii=False))
+        return
+    s = p["summary"]
+    print(f"Listening profile  ({p['now']['local_time']}, {p['now']['time_of_day']})")
+    print(f"  {s['tracked_plays']} plays, {s['unique_tracks']} tracks, {s['hours_listened']}h tracked, "
+          f"{s['skips']} skips, {s['favorites']} favorites" + (f", since {s['since']}" if s['since'] else ""))
+    if p["top_artists"]:
+        print("\nTop artists:   " + ", ".join(a["artist"] for a in p["top_artists"][:8]))
+    if p["this_time_of_day"]["top_artists"]:
+        print(f"Your {p['now']['time_of_day']}s:   " + ", ".join(p["this_time_of_day"]["top_artists"]))
+    if p["top_tracks"]:
+        print("\nTop tracks:")
+        for i, t in enumerate(p["top_tracks"][:10]):
+            print(f"  {i+1}. {t['title']}" + ("  <3" if t.get("favorite") else ""))
+    if p["often_skipped"]:
+        print("\nOften skipped: " + "; ".join(t["title"] for t in p["often_skipped"][:5]))
+    if p.get("note"):
+        print("\n" + p["note"])
