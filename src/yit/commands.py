@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
-from .config import RESULTS_FILE, HISTORY_FILE, IPC_PIPE, PLAYS_LOG, ensure_yit_dir
+from .config import RESULTS_FILE, HISTORY_FILE, IPC_PIPE, PLAYS_LOG, YIT_DIR, ensure_yit_dir
 from .utils import extract_video_id
 from .ipc import send_ipc_command, get_ipc_property
 from .storage import save_to_history, load_favorites, save_favorites, remember_tracks, log_search
@@ -53,6 +53,8 @@ def _mpv_command(tracks):
         "--prefetch-playlist=yes",
         "--demuxer-max-bytes=128M",
         "--demuxer-max-back-bytes=128M",
+        "--ytdl-format=bestaudio/best",
+        f"--log-file={YIT_DIR / 'mpv.log'}",
         f"--input-ipc-server={IPC_PIPE}",
     ]
     opts = [f"yit_tracker-log={PLAYS_LOG}"]
@@ -236,6 +238,14 @@ def cmd_queue(args):
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
                 load_into_maps(json.load(f))
         except Exception: pass
+
+    try:
+        from .storage import load_catalog
+        for vid, meta in load_catalog().items():
+            if meta.get("title"):
+                id_map.setdefault(vid, meta["title"])
+    except Exception:
+        pass
 
     print("\nCurrent Queue:")
     for i, item in enumerate(playlist):

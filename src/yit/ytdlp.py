@@ -50,7 +50,8 @@ def ytdlp_executable():
 
 
 def player_env():
-    """Environment for the mpv daemon with every pip scripts dir on PATH."""
+    """Environment with every pip scripts dir on PATH, so mpv finds yt-dlp and
+    yt-dlp finds the `deno` JS runtime it needs to unlock YouTube streams."""
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join(_scripts_dirs() + [env.get("PATH", "")])
     return env
@@ -61,7 +62,8 @@ def _run_json(target, extra=None, timeout=60):
     cmd += extra or []
     cmd.append(target)
     res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                         errors="replace", stdin=subprocess.DEVNULL, timeout=timeout)
+                         errors="replace", stdin=subprocess.DEVNULL, timeout=timeout,
+                         env=player_env())
     if res.returncode != 0:
         raise RuntimeError((res.stderr or "yt-dlp failed").strip().splitlines()[-1])
     return json.loads(res.stdout)

@@ -16,7 +16,9 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "yt-dlp>=2023.0.0",
+    "yt-dlp[default]>=2025.11.12",
+    # YouTube now needs a JS runtime to solve stream challenges; yt-dlp auto-detects deno.
+    "deno>=2; platform_machine == 'AMD64' or platform_machine == 'x86_64' or platform_machine == 'arm64' or platform_machine == 'aarch64'",
     "requests",
     "mcp>=1.2"
 ]
