@@ -19,6 +19,7 @@ It runs in the background (daemonized), meaning you can close your terminal, swi
 *   **Smart Queue**: Manage your playlist (`add`, `next`, `back`, `Loop`) with simple commands.
 *   **Cross-Platform**: Works natively on **Windows**, **macOS**, and **Linux**.
 *   **Agent-Native**: Built from the ground up to be controlled by AI Agents (Vibe Coding).
+*   **Learns Your Taste (Jarvis mode)**: Tracks what you finish vs. skip, builds a local taste profile, and DJs for you: personal mixes, endless radio, and an MCP server that lets Claude pick music like it knows you.
 
 ---
 
@@ -100,6 +101,25 @@ yit fav play 3     # Play favorite #3
 yit fav remove 2   # Remove favorite #2
 ```
 
+### 7. Jarvis Mode: it learns what you like 🧠
+Every track you play is logged locally (`~/.yit/plays.jsonl`) with how long you actually listened, so Yit knows the difference between a song you finished and one you skipped after 5 seconds. Nothing leaves your machine.
+
+```bash
+yit dj                      # Personal queue: favourites you haven't heard lately + new songs like them
+yit dj --discovery 0.7      # More discovery, fewer repeats
+yit radio                   # Endless radio from the current song (YouTube Mix)
+yit radio "kaavaalaa"       # ...or from any song
+yit mix "Artist - Song" "Artist2 - Song2"   # Queue a hand-picked list
+yit like                    # Love the current song (favorite + boost)
+yit dislike [--artist]      # Never again (optionally the whole artist); skips it
+yit profile                 # See what Yit has learned about you
+```
+
+**Skip the cold start:** export your YouTube Music history from [Google Takeout](https://takeout.google.com) (select *YouTube and YouTube Music → history*, JSON or HTML) and run:
+```bash
+yit import "Takeout/YouTube and YouTube Music/history/watch-history.json"
+```
+
 ---
 
 ## 🤖 For AI Agents & Vibe Coding
@@ -143,6 +163,17 @@ Add the following JSON configuration block to your client's MCP config file (e.g
   }
 }
 ```
+
+> **Windows tip:** if `yit-mcp` isn't on your PATH (common with `pip install --user`), point the client at Python directly:
+> `"command": "C:\\Python314\\python.exe", "args": ["-m", "yit.mcp_server"]`
+
+#### Claude as your DJ
+The MCP server ships with DJ instructions and taste-aware tools (`get_listening_profile`, `dj_play_for_me`, `play_songs`, `start_radio`, `like_current_song`, `dislike_current_song`, `import_youtube_music_history`). Then just talk to Claude:
+
+*   "play something" → reads your profile, plays a personal mix for this time of day
+*   "I need to focus for 2 hours" → hand-picks focus tracks from artists you love + similar ones you haven't heard
+*   "more like this" → radio from the current song
+*   "this is trash, never again" → dislikes and skips it; Yit remembers
 
 ---
 

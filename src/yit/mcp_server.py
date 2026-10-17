@@ -1,6 +1,10 @@
 import json
-from mcp.server.fastmcp import FastMCP
 from types import SimpleNamespace
+
+try:  # mcp 1.x
+    from mcp.server.fastmcp import FastMCP as _Server
+except ImportError:  # mcp 2.x renamed FastMCP -> MCPServer
+    from mcp.server.mcpserver import MCPServer as _Server
 
 # Import functions from Yit's internal modules
 from .commands import (
@@ -14,8 +18,25 @@ from .config import RESULTS_FILE, HISTORY_FILE, FAV_FILE
 from .ipc import get_ipc_property
 from .utils import extract_video_id
 
-# Create the FastMCP Server
-mcp = FastMCP("yit-player")
+INSTRUCTIONS = """\
+You are the user's personal music DJ ("Jarvis" mode) controlling Yit, a background YouTube music player.
+Yit learns from real listening: what they finish, what they skip, favorites, dislikes, searches, time of day.
+
+How to behave:
+- Vague requests ("play something", "music", "I'm bored", "vibe check"): call get_listening_profile first,
+  then either dj_play_for_me (taste-based queue, fastest) or hand-pick songs with play_songs.
+- Mood/activity requests ("focus music", "gym", "rainy night", "something like X but sadder"): call
+  get_listening_profile, then pick 10-15 specific "Artist - Song" titles that fit the mood, blending artists
+  they already love (top_artists, this_time_of_day) with similar artists they likely haven't heard, and call
+  play_songs. Respect language/region preferences visible in their history. Avoid anything in disliked.
+- "More like this" / "keep this vibe going": start_radio with no seed (uses the current song).
+- Specific song or artist: search_music_on_youtube.
+- When they react ("love this", "this is trash", "never play this again", "not this artist"), call
+  like_current_song / dislike_current_song so Yit learns.
+- Keep replies short: what's playing and why it fits them, in one or two lines. No track-by-track essays.
+"""
+
+mcp = _Server("yit-player", instructions=INSTRUCTIONS)
 
 # Helper to capture printed output from commands (since Yit mostly prints its output)
 import io
@@ -192,6 +213,66 @@ def remove_favorite(index: int) -> str:
         from .commands import cmd_fav
         cmd_fav(args)
     return out.getvalue()
+
+# --- JARVIS: TASTE-AWARE TOOLS ---
+
+@mcp.tool()
+def get_listening_profile() -> str:
+    """Returns what Yit has learned about the user's music taste as JSON: top artists and tracks (recency-weighted,
+    from songs they actually finished), what they play at this time of day, recently played, often skipped,
+    recent searches, favorites and dislikes. Call this before choosing music for vague or mood-based requests."""
+    from .taste import build_profile
+    return json.dumps(build_profile(), indent=1, ensure_ascii=False)
+
+@mcp.tool()
+def dj_play_for_me(size: int = 20, discovery: float = 0.4) -> str:
+    """Builds and plays a personal queue from the user's taste: favourites they haven't heard recently, mixed with
+    new songs similar to what they love (via YouTube Mix). discovery = share of new-to-them songs (0 to 1)."""
+    from .dj import dj
+    with capture_output() as (out, _):
+        msg = dj(size=size, discovery=discovery)
+    return msg
+
+@mcp.tool()
+def play_songs(songs: list[str], replace_queue: bool = True) -> str:
+    """Plays a hand-picked list of specific songs in order. Each item should be a precise search like
+    "Artist - Song Title". Set replace_queue=false to append after the current queue instead."""
+    from .dj import play_mix
+    with capture_output() as (out, _):
+        msg = play_mix(songs, replace=replace_queue)
+    return msg
+
+@mcp.tool()
+def start_radio(seed: str = "") -> str:
+    """Plays an endless-style radio of songs similar to a seed (song name or YouTube URL). With no seed it continues
+    from the currently playing song, or from the user's top track if nothing is playing."""
+    from .dj import radio
+    with capture_output() as (out, _):
+        msg = radio(seed or None)
+    return msg
+
+@mcp.tool()
+def like_current_song() -> str:
+    """Marks the currently playing song as liked (adds to favorites and boosts it in future recommendations)."""
+    from .dj import like_current
+    return like_current()
+
+@mcp.tool()
+def dislike_current_song(block_artist: bool = False, skip: bool = True) -> str:
+    """Marks the current song as disliked so it's never recommended again, and skips it. block_artist=true also
+    excludes that artist from all future recommendations."""
+    from .dj import dislike_current
+    with capture_output() as (out, _):
+        msg = dislike_current(block_artist=block_artist, skip=skip)
+    return msg
+
+@mcp.tool()
+def import_youtube_music_history(file_path: str, include_regular_youtube: bool = False) -> str:
+    """Imports the user's Google Takeout YouTube watch history (watch-history.json or .html) so Yit knows their taste
+    from day one. By default only YouTube Music entries are imported."""
+    from .dj import import_takeout
+    return import_takeout(file_path, include_all=include_regular_youtube)
+
 
 def main():
     mcp.run()
